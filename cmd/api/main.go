@@ -66,6 +66,10 @@ func main() {
 	}
 
 	fmt.Println("Conexión a MongoDB lista.")
+	// Crear índices
+	if err := database.CreateIndexes(); err != nil {
+		log.Fatal("Error creando índices en MongoDB:", err)
+	}
 
 	// --------------------------------------------------
 	// Conexión a Redis (cache)
@@ -99,6 +103,41 @@ func main() {
 }
 
 // -----------------------------------------------------------
+// VERIFICAR SI EXISTE RECOMENDACIÓN EN MONGODB
+// -----------------------------------------------------------
+
+func checkExistingRecommendationInMongo(user string) (bool, []knn.Recommended, error) {
+	col := database.RecsCollection()
+
+	filter := map[string]interface{}{
+		"userID": user,
+	}
+
+	var existingDoc database.RecommendationDocument
+	err := col.FindOne(context.Background(), filter).Decode(&existingDoc)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// No existe documento para este usuario
+			return false, nil, nil
+		}
+		// Error en la consulta
+		return false, nil, err
+	}
+
+	// Convertir de database.RecommendedItem a knn.Recommended
+	var recs []knn.Recommended
+	for _, item := range existingDoc.Recommended {
+		recs = append(recs, knn.Recommended{
+			MovieID:   item.MovieID,
+			Predicted: item.Predicted,
+		})
+	}
+
+	return true, recs, nil
+}
+
+// -----------------------------------------------------------
 // ENDPOINT: GET /recommend/:userID
 // -----------------------------------------------------------
 
@@ -116,7 +155,8 @@ func handleRecommendUser(w http.ResponseWriter, r *http.Request) {
 
 	cacheKey := "recs:" + user
 
-	// 1) Intentar cache (Redis)
+	// 1) VERIFICAR PRIMERO SI YA EXISTE EN MONGODB
+	// (Solo si Redis está disponible, usamos cache primero)
 	if redisClient != nil {
 		if cached, err := redisClient.Get(ctx, cacheKey).Result(); err == nil {
 			// Cache hit: devolvemos directamente el JSON almacenado
@@ -133,7 +173,30 @@ func handleRecommendUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Cache miss → calcular
+	// 2) VERIFICAR SI YA EXISTE EN MONGODB ANTES DE CALCULAR
+	exists, existingRecs, err := checkExistingRecommendationInMongo(user)
+	if err != nil {
+		fmt.Println("Error verificando MongoDB:", err)
+		// Continuamos con el cálculo en caso de error
+	} else if exists {
+		fmt.Println("Recomendación ya existe en MongoDB para usuario:", user)
+
+		// Si existe en MongoDB pero no en Redis, la guardamos en Redis
+		if redisClient != nil {
+			jsonBytes, err := json.Marshal(existingRecs)
+			if err == nil {
+				redisClient.Set(ctx, cacheKey, string(jsonBytes), RedisTTL)
+				fmt.Println("Copiado de MongoDB a Redis para usuario:", user)
+			}
+		}
+
+		// Respondemos con las recomendaciones existentes
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(existingRecs)
+		return
+	}
+
+	// 3) Si no existe en MongoDB, calcular recomendaciones
 	start := time.Now()
 	recs, err := distributedRecommendation(user)
 	if err != nil {
@@ -142,20 +205,19 @@ func handleRecommendUser(w http.ResponseWriter, r *http.Request) {
 	}
 	latency := time.Since(start).Milliseconds()
 
-	// Guardar historial en MongoDB (asíncrono)
+	// 4) Guardar en MongoDB (asíncrono)
 	go saveRecommendationToMongo(user, recs, latency)
 
 	// Serializar recomendaciones a JSON
 	jsonBytes, err := json.Marshal(recs)
 	if err != nil {
-		// Si no se puede serializar, aun respondemos con lo calculado
 		fmt.Println("Error al serializar recomendaciones:", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(recs)
 		return
 	}
 
-	// Guardar en Redis (si está disponible) con TTL
+	// 5) Guardar en Redis (si está disponible) con TTL
 	if redisClient != nil {
 		if err := redisClient.Set(ctx, cacheKey, string(jsonBytes), RedisTTL).Err(); err != nil {
 			fmt.Println("Advertencia: no se pudo escribir en Redis:", err)
@@ -327,33 +389,25 @@ func sendTaskToNode(addr, target string, chunk map[string]map[string]float64) ([
 func saveRecommendationToMongo(user string, recs []knn.Recommended, latencyMS int64) {
 	col := database.RecsCollection()
 
-	// -----------------------------
-	// 1. Verificar si ya existe
-	// -----------------------------
-
-	filter := map[string]interface{}{
-		"userID": user,
-	}
+	// 1. Verificar si ya existe un documento para este userID
+	filter := bson.M{"userID": user}
 
 	var existing database.RecommendationDocument
 	err := col.FindOne(context.Background(), filter).Decode(&existing)
 
-	// Si no hay error → ya existe → no guardamos nada
 	if err == nil {
-		fmt.Println("Recomendación ya existe en MongoDB para usuario:", user)
+		// Documento existente → NO guardar otra vez
+		fmt.Println("Mongo: recomendación YA EXISTE, no se guardará duplicado para usuario:", user)
 		return
 	}
 
-	// Si el error NO es "no encontrado", es un error real
-	if err != mongo.ErrNoDocuments {
-		fmt.Println("Error consultando MongoDB:", err)
+	// Si el error NO es ErrNoDocuments → error real
+	if err != nil && err != mongo.ErrNoDocuments {
+		fmt.Println("Mongo: error inesperado al verificar existencia:", err)
 		return
 	}
 
-	// -----------------------------
 	// 2. Convertir recomendaciones
-	// -----------------------------
-
 	items := make([]database.RecommendedItem, 0, len(recs))
 	for _, r := range recs {
 		items = append(items, database.RecommendedItem{
@@ -362,6 +416,7 @@ func saveRecommendationToMongo(user string, recs []knn.Recommended, latencyMS in
 		})
 	}
 
+	// 3. Crear documento nuevo
 	doc := database.RecommendationDocument{
 		UserID:        user,
 		Recommended:   items,
@@ -369,17 +424,14 @@ func saveRecommendationToMongo(user string, recs []knn.Recommended, latencyMS in
 		TimestampUnix: time.Now().Unix(),
 	}
 
-	// -----------------------------
-	// 3. Insertar porque no existía
-	// -----------------------------
-
+	// 4. Insertar
 	_, err = col.InsertOne(context.Background(), doc)
 	if err != nil {
-		fmt.Println("Error guardando recomendación:", err)
+		fmt.Println("Mongo: error al insertar recomendación:", err)
 		return
 	}
 
-	fmt.Println("Recomendación guardada en MongoDB para usuario:", user)
+	fmt.Println("Mongo: recomendación insertada correctamente para usuario:", user)
 }
 
 // -----------------------------------------------------------
