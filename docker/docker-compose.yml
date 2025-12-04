@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+
+  mongo:
+    image: mongo:6
+    container_name: pcd-pc4_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - mlnet
+
+  redis:
+    image: redis:7
+    container_name: pcd-pc4_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - mlnet
+
+  nodo1:
+    build:
+      context: ..
+      dockerfile: docker/nodo.Dockerfile
+    container_name: pcd-pc4_nodo1
+    environment:
+      - PORT=9000
+    ports:
+      - "9000:9000"
+    networks:
+      - mlnet
+
+  nodo2:
+    build:
+      context: ..
+      dockerfile: docker/nodo.Dockerfile
+    container_name: pcd-pc4_nodo2
+    environment:
+      - PORT=9001
+    ports:
+      - "9001:9001"
+    networks:
+      - mlnet
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    container_name: pcd-pc4_api
+    environment:
+      - MONGO_URI=mongodb://pcd-pc4_mongo:27017
+      - REDIS_ADDR=pcd-pc4_redis:6379
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mongo
+      - redis
+      - nodo1
+      - nodo2
+    networks:
+      - mlnet
+      
+  loadmongo:
+    build:
+      context: ..
+      dockerfile: docker/loadmongo.Dockerfile
+    depends_on:
+      - mongo
+    networks:
+      - mlnet
+
+networks:
+  mlnet:
+    driver: bridge
+
+volumes:
+  mongo_data:
