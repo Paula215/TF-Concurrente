@@ -65,14 +65,16 @@ Ejecutar la herramienta de limpieza:
 ```bash
 go run internal/cleaning/clean.go
 Esto generará archivos limpios en data/clean/.
+```
 
 2. Despliegue del sistema completo
 Ejecutar desde el directorio /docker:
 
-bash
-Copy code
+```bash
 cd docker
 docker-compose up --build
+```
+
 Servicios levantados:
 
 MongoDB
@@ -89,19 +91,19 @@ Endpoints principales
 Base URL: http://localhost:8080
 
 Método	Endpoint	Descripción
+```bash
 GET	/recommend/{userID}	Genera recomendaciones
 GET	/ratings/{userID}	Retorna ratings del usuario
 GET	/movies	Lista todas las películas
 GET	/movies/genre/{genre}	Filtra películas por género
-
+```
 Ejemplo de uso:
 
-bash
-Copy code
+```bash
 curl http://localhost:8080/recommend/1
 Flujo de procesamiento distribuido
 El cliente solicita una recomendación.
-
+```
 La API revisa si existe en Redis.
 
 Si no existe, revisa MongoDB.
@@ -128,11 +130,10 @@ go run internal/analisis/analisis.go
 Genera CSVs en /analysis con métricas y estadísticas.
 
 Benchmarking de concurrencia
-bash
-Copy code
+```bash
 go run cmd/bench/main.go -workers="1,2,4,8" -sample=100
 Permite comparar tiempos de procesamiento.
-
+```
 Tecnologías usadas
 Lenguaje Go
 
@@ -145,6 +146,5 @@ TCP Sockets con gob
 Docker Compose
 
 Autor
-Desarrollado para el curso de Programación Concurrente y Distribuida.
-
+Ayton Samaniego
 Paula Mancilla
