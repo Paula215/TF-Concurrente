@@ -16,29 +16,6 @@ Este proyecto implementa un sistema de recomendación de películas basado en Fi
 
 ---
 
-## Estructura del proyecto
-
-├── cmd/
-│ ├── api/ # API HTTP (orquestador)
-│ ├── nodo/ # Worker TCP (cálculo distribuido KNN)
-│ ├── loadmongo/ # Importación de CSVs a MongoDB
-│ └── bench/ # Herramientas de benchmarking
-├── internal/
-│ ├── analisis/ # Reportes estadísticos del dataset
-│ ├── cleaning/ # Limpieza concurrente de datos raw
-│ └── knn/ # Coseno, vecinos y predicción
-├── pkg/
-│ ├── database/ # Drivers y modelos MongoDB
-│ └── network/ # Protocolos TCP API <-> Workers
-├── docker/ # Dockerfiles y docker-compose
-├── data/ # Dataset raw/clean (ignorado por git)
-└── go.mod
-
-yaml
-Copy code
-
----
-
 ## Requisitos previos
 
 - Docker y Docker Compose  
@@ -132,8 +109,9 @@ Genera CSVs en /analysis con métricas y estadísticas.
 Benchmarking de concurrencia
 ```bash
 go run cmd/bench/main.go -workers="1,2,4,8" -sample=100
-Permite comparar tiempos de procesamiento.
 ```
+Permite comparar tiempos de procesamiento.
+
 Tecnologías usadas
 Lenguaje Go
 
