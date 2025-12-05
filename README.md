@@ -1,46 +1,49 @@
-Sistema de Recomendación Distribuido y Concurrente
-Go + MongoDB + Redis
+# Sistema de Recomendación Distribuido y Concurrente  
+### Go + MongoDB + Redis
 
 Este proyecto implementa un sistema de recomendación de películas basado en Filtrado Colaborativo (User-Based KNN). Utiliza una arquitectura distribuida escrita en Go y aprovecha concurrencia y caching para procesar grandes volúmenes de datos de forma eficiente.
 
-Características principales
+---
 
-Arquitectura distribuida con API orquestadora y nodos de cálculo vía TCP.
+## Características principales
 
-Concurrencia mediante goroutines y channels.
+- Arquitectura distribuida con API orquestadora y nodos de cálculo vía TCP.  
+- Concurrencia mediante goroutines y channels.  
+- Algoritmo User-Based KNN basado en similitud de coseno.  
+- Caching de resultados mediante Redis.  
+- Persistencia y consultas históricas usando MongoDB.  
+- Despliegue completo con contenedores mediante Docker Compose.
 
-Algoritmo User-Based KNN basado en similitud de coseno.
+---
 
-Caching de resultados mediante Redis.
+## Estructura del proyecto
 
-Persistencia y consultas históricas usando MongoDB.
-
-Despliegue completo con contenedores mediante Docker Compose.
-
-Estructura del proyecto
 ├── cmd/
-│   ├── api/        # API HTTP (orquestador)
-│   ├── nodo/       # Worker TCP (cálculo distribuido KNN)
-│   ├── loadmongo/  # Importación de CSVs a MongoDB
-│   └── bench/      # Herramientas de benchmarking
+│ ├── api/ # API HTTP (orquestador)
+│ ├── nodo/ # Worker TCP (cálculo distribuido KNN)
+│ ├── loadmongo/ # Importación de CSVs a MongoDB
+│ └── bench/ # Herramientas de benchmarking
 ├── internal/
-│   ├── analisis/   # Reportes estadísticos del dataset
-│   ├── cleaning/   # Limpieza concurrente de datos raw
-│   └── knn/        # Coseno, vecinos y predicción
+│ ├── analisis/ # Reportes estadísticos del dataset
+│ ├── cleaning/ # Limpieza concurrente de datos raw
+│ └── knn/ # Coseno, vecinos y predicción
 ├── pkg/
-│   ├── database/   # Drivers y modelos MongoDB
-│   └── network/    # Protocolos TCP API <-> Workers
-├── docker/         # Dockerfiles y docker-compose
-├── data/           # Dataset raw/clean (ignorado por git)
+│ ├── database/ # Drivers y modelos MongoDB
+│ └── network/ # Protocolos TCP API <-> Workers
+├── docker/ # Dockerfiles y docker-compose
+├── data/ # Dataset raw/clean (ignorado por git)
 └── go.mod
 
-Requisitos previos
+yaml
+Copy code
 
-Docker y Docker Compose
+---
 
-Go 1.22+ (solo para ejecución local de herramientas)
+## Requisitos previos
 
-Dataset MovieLens en formato .dat en data/raw/
+- Docker y Docker Compose  
+- Go 1.22+ (solo para ejecución local de herramientas)  
+- Dataset MovieLens en formato `.dat` en la carpeta `data/raw/`
 
 Archivos esperados:
 
@@ -48,94 +51,100 @@ ratings.dat
 movies.dat
 tags.dat
 
-Instalación y ejecución
-1. Limpieza y preparación de datos
+yaml
+Copy code
+
+---
+
+## Instalación y ejecución
+
+### 1. Limpieza y preparación de datos
+
+Ejecutar la herramienta de limpieza:
+
+```bash
 go run internal/cleaning/clean.go
-
-
-Salida generada en data/clean/.
+Esto generará archivos limpios en data/clean/.
 
 2. Despliegue del sistema completo
+Ejecutar desde el directorio /docker:
+
+bash
+Copy code
 cd docker
 docker-compose up --build
-
-
-Se desplegarán:
+Servicios levantados:
 
 MongoDB
 
 Redis
 
-API en puerto 8080
+API Gateway en puerto 8080
 
-Nodos TCP
+Nodos de procesamiento TCP
 
 Servicio de carga automática hacia MongoDB
 
 Endpoints principales
-
 Base URL: http://localhost:8080
 
 Método	Endpoint	Descripción
 GET	/recommend/{userID}	Genera recomendaciones
-GET	/ratings/{userID}	Muestra historial del usuario
+GET	/ratings/{userID}	Retorna ratings del usuario
 GET	/movies	Lista todas las películas
-GET	/movies/genre/{genre}	Filtra por género
+GET	/movies/genre/{genre}	Filtra películas por género
 
-Ejemplo:
+Ejemplo de uso:
 
+bash
+Copy code
 curl http://localhost:8080/recommend/1
+Flujo de procesamiento distribuido
+El cliente solicita una recomendación.
 
-Flujo de procesamiento
+La API revisa si existe en Redis.
 
-Se consulta recomendación desde el cliente.
+Si no existe, revisa MongoDB.
 
-La API valida caché en Redis.
+Si tampoco existe allí:
 
-Si no existe en caché, consulta MongoDB.
+Divide el dataset en bloques.
 
-Si no hay datos almacenados:
+Envía tareas a nodos TCP.
 
-La API corta el dataset en particiones.
+Cada nodo calcula similitud de coseno concurrentemente.
 
-Envía a nodos TCP.
+La API agrega resultados parciales y predice ratings.
 
-Cada nodo calcula similitud de coseno.
+El resultado es almacenado en Redis y MongoDB.
 
-La API consolida los resultados.
+Se devuelve al cliente.
 
-Se almacena respuesta en Redis y MongoDB.
-
-Se retorna la respuesta final al cliente.
-
-Herramientas adicionales
-Análisis exploratorio
+Herramientas complementarias
+Análisis exploratorio del dataset
+bash
+Copy code
 go run internal/analisis/analisis.go
-
-
-Genera resultados en: /analysis/
+Genera CSVs en /analysis con métricas y estadísticas.
 
 Benchmarking de concurrencia
+bash
+Copy code
 go run cmd/bench/main.go -workers="1,2,4,8" -sample=100
+Permite comparar tiempos de procesamiento.
 
-
-Permite evaluar diferencias entre número de workers y tiempo de procesamiento.
-
-Tecnologías involucradas
-
-Go
+Tecnologías usadas
+Lenguaje Go
 
 MongoDB con driver oficial
 
-Redis usando go-redis/v9
+Redis (go-redis/v9)
 
-TCP sockets con serialización gob
+TCP Sockets con gob
 
 Docker Compose
 
 Autor
+Desarrollado para el curso de Programación Concurrente y Distribuida.
 
-Proyecto desarrollado para el curso de Programación Concurrente y Distribuida.
-
-Ayrton Samaniego
 Paula Mancilla
