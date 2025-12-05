@@ -43,7 +43,7 @@ Ejecutar la herramienta de limpieza:
 go run internal/cleaning/clean.go
 Esto generará archivos limpios en data/clean/.
 ```
-
+---
 2. Despliegue del sistema completo
 Ejecutar desde el directorio /docker:
 
@@ -102,14 +102,14 @@ Se devuelve al cliente.
 Herramientas complementarias
 Análisis exploratorio del dataset
 bash
-Copy code
 go run internal/analisis/analisis.go
 Genera CSVs en /analysis con métricas y estadísticas.
-
+---
 Benchmarking de concurrencia
 ```bash
 go run cmd/bench/main.go -workers="1,2,4,8" -sample=100
 ```
+
 Permite comparar tiempos de procesamiento.
 
 Tecnologías usadas
@@ -122,7 +122,9 @@ Redis (go-redis/v9)
 TCP Sockets con gob
 
 Docker Compose
+---
+Autores
 
-Autor
 Ayton Samaniego
+
 Paula Mancilla
