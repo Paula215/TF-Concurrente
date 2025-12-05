@@ -122,8 +122,10 @@ Redis (go-redis/v9)
 TCP Sockets con gob
 
 Docker Compose
+
 ---
-Autores
+
+## Autores
 
 Ayton Samaniego
 
